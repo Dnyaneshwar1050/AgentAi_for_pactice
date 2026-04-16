@@ -2,6 +2,7 @@
   "name": "agentai_for_pactice",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,6 +10,7 @@
   "author": "dnyaneshwar",
   "license": "ISC",
   "dependencies": {
+    "@chroma-core/default-embed": "^0.1.9",
     "axios": "^1.15.0",
     "cheerio": "^1.2.0",
     "chromadb": "^3.4.3",

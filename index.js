@@ -27,9 +27,9 @@ async function scapeWebpage(url) {
 
     $('a').each((_, element) => {
         const link = $(element).attr('href');
-        if (link && link.startsWith('http') || link.startsWith('https')) {
+        if (link && (link.startsWith('http://') || link.startsWith('https://'))) {
             externalLinks.add(link);
-        } else {
+        } else if (link) {
             internalLinks.add(link);
         }
     });
@@ -67,23 +67,72 @@ async function scapeWebpage(url) {
         const { head, body, internalLinks } = await scapeWebpage(url);
         const bodychunks = chunkText(body, 1000)
 
-        for (const chunk of bodychunks) {
-            const bodyEmbedding = await genrateVectorEmbeddings({ text: chunk });
-            await insertIntoDB({ embedding: bodyEmbedding, url, body: chunk, head });
-        }
+        for (let i = 0; i < bodychunks.length; i++) {
+        const chunk = bodychunks[i];
 
-    
+        const bodyEmbedding = await genrateVectorEmbeddings({
+            text: chunk
+        });
 
+        await insertIntoDB({
+            id: `${url}-chunk-${i}`,   // ✅ important
+            embedding: bodyEmbedding,
+            url,
+            body: chunk,
+            head
+        });
+    }
+        
 
         console.log(`Finished ingesting ${url}`);
     }
 
-    await ingest('https://www.piyushgarg.dev');
+    async function chat(question = '') {
+        const questionEmbedding = await genrateVectorEmbeddings({ text: question });
+
+        const collection = await chromaClient.getOrCreateCollection({
+            name: WEB_COLLECTION,
+            embeddingFunction: null
+        });
+        const colllectionResults = await collection.query({
+            queryEmbeddings: [questionEmbedding],
+            nResults: 3,
+        });
+        const body = colllectionResults.metadatas[0].map((e) => e.body).filter((e) => e.trim() !=='' && !!e);
+
+        const url = colllectionResults.metadatas[0].map((e) => e.url).filter((e) => e.trim() !=='' && !!e);
+
+        const response = await openaiClient.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a helpful assistant. Use the following retrieved information from the web to answer the question. If you don't know the answer, say you don't know. Always use all the information you can get.`
+                },
+                {
+                    role: 'user',
+                    content: `
+                    query: ${question}\n\n
+                    urls: ${url.join(', ')}\n\n
+                    retrieved information: ${body.join(',')}\n\n
+                    `
+                }
+            ]
+        });
+        console.log({
+            message: `🤖: ${response.choices[0].message.content}`,
+            url: url[0]
+        });   
+
+    }
+
+
+
+    // await ingest('https://www.piyushgarg.dev');
     await ingest('https://www.piyushgarg.dev/cohort');
-    await ingest('https://www.piyushgarg.dev/about');
+    // await ingest('https://www.piyushgarg.dev/about');
 
-
-
+    await chat('What is Cohort?');
 
 
 function chunkText(text, chunkSize) {
